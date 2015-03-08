@@ -1,0 +1,17 @@
+---
+title: "project.rmd"
+author: "Steve Leathers"
+date: "March 7, 2015"
+output: html_document
+---
+
+First let's load our libraries
+```{r}
+library(caret)
+library(kernlab)
+```
+
+```{r}
+test = read.csv("pml-testing.csv")
+train = read.csv("pml-training.csv")
+```
