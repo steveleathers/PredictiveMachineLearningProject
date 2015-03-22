@@ -5,13 +5,89 @@ date: "March 7, 2015"
 output: html_document
 ---
 
+
+
 First let's load our libraries
-```{r}
+```{r, cache=TRUE}
 library(caret)
 library(kernlab)
 ```
-
-```{r}
-test = read.csv("pml-testing.csv")
-train = read.csv("pml-training.csv")
+And let's load our data. Keep in mind, we won't need the Testing set for this paper, but we will use it later on in the assigment.
+```{r, cache=TRUE}
+testing <- read.csv("pml-testing.csv", na.strings=c("NA",""))
+training <- read.csv("pml-training.csv", na.strings=c("NA",""))
 ```
+
+A cursory glance at this dataset shows that we've got a bunch of NAs in a lot of our fields:
+```{r, cache=TRUE}
+length(which(!is.na(training$max_roll_belt)))
+length(which(!is.na(training$var_yaw_belt)))
+length(which(!is.na(training$amplitude_pitch_dumbell)))
+```
+
+Since it looks like we're only have calculations for 406 cases, and we have a over 19000 observations total, imputing the values would be a long shot. Let's just remove these columns entirely.
+```{r, cache=TRUE}
+NAvalues <- apply(training, 2, function(x) length(which(is.na(x))))
+training <- training[,which(NAvalues == 0)]
+```
+
+We can also run a test for variables. that have very little variance and remove them as well.
+```{r, cache=TRUE}
+nzv <- nearZeroVar(training)
+training <- training[,-nzv]
+```
+
+Now let's take our training set and break it into a smaller training set and a testing set.
+```{r, cache=TRUE}
+inTrain <- createDataPartition(training$classe, p=0.8, list=FALSE)
+training.training <- training[inTrain,]
+training.testing <- training[-inTrain,]
+```
+
+##Model fitting
+We'll start off by trying to fit a model using a Classification and Regression Tree.
+```{r, cache=TRUE}
+model = train(classe~., data=training.training, method="rpart")
+model
+```
+
+###CART Model accuracy
+We can find the accuracy by reviewing the outputs of our model as such:
+```{r}
+model$results$Accuracy*100
+```
+77% accuracy isn't awful, but it's not great either. Let's try fitting another model using Random Forests.
+```{r, cache=TRUE}
+ctrl <- trainControl(method = "cv", number = 4, allowParallel = TRUE)
+model2 <- train(classe ~ ., data = training.training, method = "rf", 
+    prof = TRUE, trControl = ctrl)
+model2$finalModel
+```
+Here we have a much higher level of accuracy.
+```{r}
+model2$results$Accuracy*100
+```
+
+#Cross-validataion
+We can now use our model that we created to predict values within our test set that we created.
+
+```{r, cache=TRUE}
+pred <- predict(model2, training.testing)
+training.testing$predRight <- pred == training.testing$classe
+table(pred, training.testing$classe)
+```
+
+Sure, we're not right 100% of the time, but we're pretty close! 
+```{r, cache=TRUE}
+postRes <- postResample(pred, training.testing$classe)
+postRes
+```
+
+##Expected Out of Sample Error
+```{r, cache=TRUE}
+confusMat <- confusionMatrix(pred, training.testing$classe)
+confusMat
+outOfSampleError.accuracy <- sum(pred == training.testing$classe)/length(pred)
+outOfSampleError = (1 - outOfSampleError.accuracy)*100
+```
+Our out of sample error for this model is about 0.051%.
